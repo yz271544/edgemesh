@@ -143,10 +143,18 @@ func (proxier *Proxier) createIgnoreRules() (ignoreRules []iptablesEnsureInfo, e
 
 	// kube-dns service
 	kubeDNS, err := proxier.kubeClient.CoreV1().Services("kube-system").Get(context.Background(), "kube-dns", metav1.GetOptions{})
-	if err != nil {
-		return
+	if kubeDNS != nil && err == nil {
+		klog.V(4).Infof("ignored kubeDNS: %s", kubeDNS.Name)
+		ignoreRules = append(ignoreRules, ignoreRuleByService(kubeDNS))
 	}
-	ignoreRules = append(ignoreRules, ignoreRuleByService(kubeDNS))
+
+	kubeDNSList, err := proxier.kubeClient.CoreV1().Services("kube-system").List(context.Background(), metav1.ListOptions{LabelSelector: "k8s-app=kube-dns"})
+	if err == nil && kubeDNSList != nil && len(kubeDNSList.Items) > 0 {
+		for _, item := range kubeDNSList.Items {
+			klog.V(4).Infof("ignored containing k8s-app=kube-dns label service: %s", item.Name)
+			ignoreRules = append(ignoreRules, ignoreRuleByService(&item))
+		}
+	}
 
 	// Other services we want to ignore...
 
